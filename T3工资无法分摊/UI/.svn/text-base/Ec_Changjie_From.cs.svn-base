@@ -1,0 +1,554 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Text;
+using System.Windows.Forms;
+using HongHu;
+using HongHu.DAL.DBUtility;
+using UFTReferC;
+namespace Ec_Changjie
+{
+    public partial class Ec_Changjie_from : System.Windows.Forms.AbnormityFrame.AbnormityForm
+    {
+        #region 属性 "config
+
+        /// <summary>
+        /// 多线程操作
+        /// </summary>
+        private System.ComponentModel.BackgroundWorker backgroundWorker1;
+        /// <summary>
+        ///配置文件
+        /// </summary>
+        HongHu.DLL.Config.ConfigItemXML config = new HongHu.DLL.Config.ConfigItemXML();
+
+        /// <summary>
+        /// 登录控件
+        /// </summary>
+        UFLoginSQL.LoginClass m_Login;
+        /// <summary>
+        /// 要操作的母科目
+        /// </summary>
+        private CodeItem do_codeitem;
+        /// <summary>
+        /// 欲换成的辅助核算方式
+        /// </summary>
+        codefuzhu codefz = codefuzhu.bdept;
+        #endregion 属性
+
+        #region 默认声明函数
+        
+        /// <summary>
+        /// 默认声明函数
+        /// </summary>
+        public Ec_Changjie_from()
+        {
+            Control.CheckForIllegalCrossThreadCalls = false;
+            InitializeComponent();
+            this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            InitializeBackgoundWorker();
+        }
+        #endregion
+
+
+        #region 初始化函数
+
+        /// <summary>
+        /// 初始化多线程组件
+        /// </summary>
+        private void InitializeBackgoundWorker()
+        {
+            backgroundWorker1.WorkerReportsProgress = false;
+            //执行
+            backgroundWorker1.DoWork += new DoWorkEventHandler(backgroundWorker1_DoWork);
+          //完成
+            backgroundWorker1.RunWorkerCompleted += new RunWorkerCompletedEventHandler(backgroundWorker1_RunWorkerCompleted);
+           //报告
+         //   backgroundWorkerfrom_loading.ProgressChanged += new ProgressChangedEventHandler(backgroundWorkerfrom_loading_ProgressChanged);
+        }
+
+        #endregion  初始化函数
+        #region 窗体加载
+        
+        /// <summary>
+        /// 窗体加载
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            // 登录帐套_得到连接
+            Login_Uf();
+            //何不让DataGridView自动生成列
+            dataGridView1.AutoGenerateColumns = false;
+            MessageBox.Show("操作有一定危险行!!请先做好备份. 软件暂时不能更改期初.如有需要请手工更改!!!!\n    确定修改前,请手工确认所有对应核算Id 都以选择");
+        }
+        #endregion
+
+        #region 登录帐套_得到连接 Login_Uf()
+
+        /// <summary>
+        /// 登录帐套_得到连接
+        /// </summary>
+        private void Login_Uf()
+        {
+            SetString.SQLConn = null;
+            SysDataLog.log.Info("开始登录用友");
+            m_Login = new UFLoginSQL.LoginClass();
+            // m_Login.Login()
+            String sSubId = "GL";	 //登陆总账
+            String sAccID = null;
+            String sYear = null;
+            String sUserID = null;
+            String sPassword = null;
+            String sDate = null;
+            String sServer = null;
+            //String sSerial = "";
+            try
+            {
+                if (!m_Login.Login(ref sSubId, ref sAccID, ref sYear, ref sUserID, ref sPassword, ref sDate, ref sServer))
+                {
+                    SysDataLog.log.Info("登陆失败，原因：" + m_Login.ShareString);
+                    MessageBox.Show("登陆失败，原因：" + m_Login.ShareString);
+                    this.Close();
+                    //Marshal.FinalReleaseComObject(m_Login);
+                    return;
+                }
+
+            }
+            catch (Exception ex)
+            {
+                SysDataLog.log.Error("控件操作失败! 程序退出!", ex);
+                MessageBox.Show("登录控件操作失败!!");
+                this.Close();
+                return;
+                //throw;
+            }
+
+            SysDataLog.log.Info("登录成功");
+            SysDataLog.jsonwriteobj(m_Login);
+            //SysDataLog.jsonwriteobj(m_Login.UfSystemDb);
+            //SysDataLog.log.Info(m_Login.UfSystemDb);
+            //SysDataLog.jsonwriteobj(m_Login.UfSystemDb);
+            SetString.SQLConn = m_Login.UfDbName.Substring(17);
+            SysDataLog.log.Info("SQLConn=" + SetString.SQLConn);
+            //测试连接
+            if (SqlHelper.TestConnStr(SetString.SQLConn) != null)
+            {
+                MessageBox.Show("连接数据库失败!");
+                SysDataLog.log.Info("连接数据库失败");
+                this.Close();
+                return;
+            }
+            Objectm_Login = m_Login;
+        }
+        #endregion 登录帐套_得到连接 Login_Uf()
+
+        #region 窗体关闭
+
+        /// <summary>
+        /// 窗体关闭
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            SysDataLog.log.Info(" 窗体关闭,程序结束");
+        }
+        #endregion 窗体关闭
+
+        #region 关于窗口
+
+        /// <summary>
+        /// 关于窗口
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Bt_About_Click(object sender, EventArgs e)
+        {
+            new AboutBox1().ShowDialog();
+        }
+        #endregion 关于窗口
+
+        #region 选择科目
+
+        /// <summary>
+        /// 选择科目
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void glassButton1_Click(object sender, EventArgs e)
+        {
+            SysDataLog.log.Info("点击选择科目按钮");
+            UFReferClient ufRef = new UFReferClient();
+
+                // LoLogin            Login对象 
+                //ReferDisplayMode    枚举类型：显示模式，树型加列表为2；仅有Grid列表为1 
+                //bMulti              是否多选  
+                //EnumId_Table        变体类型，建议直接用表名（支持枚举类型值和数值）  
+                //sFilter             过滤串  
+                //bPage               是否分页  
+                //lPageSize           页大小  
+                //lPageCount          总页数  
+                //lCurPage            当前页 
+            ufRef.EnumRefInit(ref Objectm_Login, DisplayMode.enuGrid, false, "Code", null, false, 1, ref lCurPageInt, 1);
+                //Ref.SetRWAuth("Customer", "W",true)
+                //            功能：设置权限
+                //语法：
+                //object.SetRWAuth(TableName As String, [cFunId As String], [bControl As Boolean = True])
+                //SetRWAuth方法的语法包含下列部分： 
+                //Object 
+                // 必需的。代表一个对象表达式，其值是参照客户端对象 
+                //TableName
+                // 需要控制权限的数据库表 
+                //CFunId
+                // 可选项。默认为读权限 
+                //BControl 
+                // 可选项。默认为控制权限 
+ 
+            
+            ufRef.Show();
+            if (ufRef.recmx == null)
+            {
+
+                SysDataLog.log.Info("未选择科目!");
+                return;
+            }
+            if (!DLL_Sql.GetCodeItem(" and " + ufRef.recmx.Filter.ToString(), ref do_codeitem))
+            {
+                SysDataLog.log.Info("读取科目失败!");
+                return;
+            }
+            tb_do_code.Text = do_codeitem.ccode + " - " + do_codeitem.ccode_name;
+            // ufRef.recmx.Filter; 
+            //ADODB.Recordset nnnnn = ufRef.recmx;
+            //MessageBox.Show(            ufRef.recmx.Source.ToString());
+           // ufRef.recmx.Find("1", 0, ADODB.SearchDirectionEnum.adSearchForward, null);
+           //
+            //SysDataLog.jsonwriteobj(           ufRef.recmx);
+
+            bingZcode();
+        }
+        #endregion 选择科目
+
+        #region 母科目框获得焦点
+
+        /// <summary>
+        /// 母科目框获得焦点
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void tb_do_code_Enter(object sender, EventArgs e)
+        {
+            if (do_codeitem != null)
+            {
+                tb_do_code.Text = do_codeitem.ccode;
+            }
+        }
+        #endregion 母科目框获得焦点
+
+        #region 母科目框失去焦点
+        /// <summary>
+        /// 母科目框失去焦点
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void tb_do_code_Leave(object sender, EventArgs e)
+        {
+
+            if (((TextBox)sender).Text.Trim().Length > 1)
+            {
+                if (!DLL_Sql.GetCodeItem(" and ccode=" + ((TextBox)sender).Text.Trim(), ref do_codeitem))
+                {
+                    SysDataLog.log.Info("读取科目失败!");
+                    return;
+                }
+            }
+            else
+            {
+                do_codeitem = null;
+            }
+
+            bingZcode();
+        }
+        void bingZcode()
+        {
+            if (do_codeitem!=null&& do_codeitem.ccode.Trim().Length > 1)
+            {
+                tb_do_code.Text = do_codeitem.ccode + " - " + do_codeitem.ccode_name;
+                dataGridView1.DataSource = DLL_Sql.GetZcodeItems(do_codeitem.ccode).Tables[0];
+            }
+            else
+            {
+                dataGridView1.DataSource = null;
+               // dataGridView1.Columns.Clear();
+            }
+        }
+
+        #endregion 母科目框失去焦点
+
+        #region 屏蔽非数字输入
+        /// <summary>
+        /// 屏蔽非数字输入
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void tb_do_code_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar != '\b' && !Char.IsDigit(e.KeyChar))
+            {
+                e.Handled = true;
+            }
+        }
+
+        #endregion 屏蔽非数字输入
+
+        #region 执行修改操作
+
+        /// <summary>
+        /// 修改操作
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void glassButton1_Click_1(object sender, EventArgs e)
+        {
+            #region 禁用其他相关控件
+
+            tb_do_code.Enabled = false;
+            Bt_About.Enabled = false;
+            Bt_st_do_code.Enabled = false;
+            groupBox1.Enabled = false;
+            groupBox2.Enabled = false;
+            #endregion 禁用其他相关控件
+
+            SysDataLog.log.Info("对用户进行确认修改操作!");
+            if (MessageBox.Show("你确定将科目转换为辅助核算,此操作将会修改为辅助核算 并将子科目全部改为辅助项目!请确认子科目是否都选择了对应辅助核算的档案ID", "提示!!", MessageBoxButtons.OKCancel) == DialogResult.OK)
+            {
+                if (dataGridView1.Rows.Count == 0)
+                {
+                    SysDataLog.log.Info("对用户进行确认修改操作!");
+                    MessageBox.Show("该科目的子科目数为0,操作结束!");
+                }
+                else
+                {
+                    /// bperson 	-- 是否个人往来核算  bit 1  False  
+                    /// bcus 		-- 是否客户往来核算  bit 1  False  
+                    /// bsup 		-- 是否供应商往来核算  bit 1  False  
+                    /// bdept 	    -- 是否部门核算  bit 1  False  
+                    /// bitem 	    -- 是否项目核算  bit 1  False  
+                    codefz.ToString();
+                    SysDataLog.log.Info("修改科目核算方式!!!");
+                    DLL_Sql.ExecCodeFz(codefz.ToString(), do_codeitem.ccode);
+                    SysDataLog.log.Info("修改科目凭证明细账!!!");
+                    string hslb = "";
+                    switch (codefz)
+                    {
+                        case codefuzhu.bcus://客户
+                            hslb = "ccus_id";
+                            break;
+                        case codefuzhu.bdept://部门
+                            hslb = "cdept_id";
+                            break;
+                        case codefuzhu.bperson://个人
+                            hslb = "cperson_id";
+                            break;
+                        case codefuzhu.bsup://供应商
+                            hslb = "csup_id";
+                            break;
+                        //case codefuzhu.bitem:
+                        //    Tbname="citem_id";
+                        //    break;
+                    }
+
+                    for (int i = 0; i < dataGridView1.Rows.Count; i++)
+                    {
+                        DLL_Sql.ExecCodeFzDfkm(do_codeitem.ccode, dataGridView1.Rows[i].Cells["ccode"].Value.ToString());
+                        DLL_Sql.ExecCodeFzBm(do_codeitem.ccode, dataGridView1.Rows[i].Cells["ccode"].Value.ToString(), dataGridView1.Rows[i].Cells["辅助编码"].Value.ToString(), hslb);
+                        //如果取第一列的值可用dataGridView1.Rows[i].Cells[0].Value.ToString(),
+                        //取到值后执行保存动作就好了
+                    }
+
+                    SysDataLog.log.Info("修改期初!!!");
+                }
+            }
+
+            #region 启用其他相关控件
+            tb_do_code.Enabled = false;
+            Bt_About.Enabled = false;
+            Bt_st_do_code.Enabled = false;
+            groupBox1.Enabled = false;
+            groupBox2.Enabled = false;
+            #endregion 启用其他相关控件
+        }
+        #endregion 执行修改操作
+
+        #region 执行线程
+
+        #region 执行工作主线程
+        /// <summary>
+        /// 执行工作主线程
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
+        {
+            // BackgroundWorker worker = sender as BackgroundWorker;
+            //e.Result = ((HongHuWorkArgs)e.Argument).WorkDoEnumWork;
+            //backgroundWorkerfrom_loading = worker;
+            ComputeFibonacci(e.Argument ); //e.Result = ComputeFibonacci((DataGridViewCellEventArgs)e.Argument, worker, e);
+        }
+        /// <summary>
+        /// 执行主要工作
+        /// </summary>
+        /// <param name="dgvcea"></param>
+        /// <param name="worker"></param>
+        /// <param name="dwea"></param>
+        void ComputeFibonacci(object dwea)
+        {
+            DataGridViewCellEventArgs e = (DataGridViewCellEventArgs)dwea;
+
+                SysDataLog.log.Info("点击选择辅助按钮");
+                UFReferClient ufRef = new UFReferClient();
+                string Tbname = "";
+                switch (codefz)
+                {
+                    case codefuzhu.bcus://客户
+                        Tbname = "Customer";
+                        break;
+                    case codefuzhu.bdept://部门
+                        Tbname = "Department";
+                        break;
+                    //case codefuzhu.bitem:
+                    //    Tbname="Customer";
+                    //    break;
+                    case codefuzhu.bperson://个人
+                        Tbname = "Person";
+                        break;
+                    case codefuzhu.bsup://供应商
+                        Tbname = "Vendor";
+                        break;
+                }
+
+                // LoLogin            Login对象 
+                //ReferDisplayMode    枚举类型：显示模式，树型加列表为2；仅有Grid列表为1 
+                //bMulti              是否多选  
+                //EnumId_Table        变体类型，建议直接用表名（支持枚举类型值和数值）  
+                //sFilter             过滤串  
+                //bPage               是否分页  
+                //lPageSize           页大小  
+                //lPageCount          总页数  
+                //lCurPage            当前页 
+
+                ufRef.EnumRefInit(ref Objectm_Login, DisplayMode.enuGrid, false, Tbname, "", false, 1, ref lCurPageInt, 1);
+
+                ufRef.Show();
+                if (ufRef.recmx == null)
+                {
+                    SysDataLog.log.Info("未选择辅助!");
+                    return;
+                }
+                this.dataGridView1["辅助编码", e.RowIndex].Value = DLL_Sql.GetFzId(" and " + ufRef.recmx.Filter.ToString(), codefz);
+                //if (!DLL_Sql.GetCodeItem(" and " + ufRef.recmx.Filter.ToString(), ref do_codeitem))
+                //{
+                //    SysDataLog.log.Info("读取科目失败!");
+                //    return;
+                //}
+                //项目参照()
+                // ufRef.ItemRefInit(Objectm_Login,
+            
+            //取消后台工作
+            //if (worker.CancellationPending)
+            //{
+            //    dwea.Cancel = true;
+            //}
+            //报告进度
+            //worker.ReportProgress(percentComplete);
+            //return result;
+        }
+
+        #endregion
+
+        #endregion 执行线程
+
+
+        #region 线程结束
+        /// <summary>
+        /// 线程结束
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void backgroundWorker1_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            if (e.Error != null)
+            {
+                MessageBox.Show(e.Error.Message);
+            }
+            else if (e.Cancelled)
+            {
+                //resultLabel.Text = "Canceled";
+            }
+            else
+            {
+                //resultLabel.Text = e.Result.ToString();
+            }
+            //this.P3_sx_bt_Click(sender, new EventArgs());
+
+            dataGridView1.Enabled = true;
+        }
+        #endregion 线程结束
+
+        #region dataGridView1内容被单击事件 
+        /// <summary>
+        /// dataGridView1内容被单击事件 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if ((e.RowIndex >= 0) && (e.ColumnIndex == this.dataGridView1.Columns["选择"].Index))
+            {
+                dataGridView1.Enabled = false;
+                //开始后台线程
+                backgroundWorker1.RunWorkerAsync(e);
+            }
+        }
+        int lCurPageInt = 1;
+        Object Objectm_Login;
+        #endregion dataGridView1内容被单击事件
+
+        #region 更改欲改为核算方式
+        /// <summary>
+        /// 更改欲改为核算方式
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void FzRDbt_CheckedChanged(object sender, EventArgs e)
+        {
+            RadioButton temprb = (RadioButton)sender;
+            switch (temprb.Name)
+            {
+                case "RB_bdept":
+                    codefz = codefuzhu.bdept;
+                    break;
+                case "RB_bperson":
+                    codefz = codefuzhu.bperson;
+                    break;
+                case "RB_bcus":
+                    codefz = codefuzhu.bcus;
+                    break;
+                case "RB_bsup":
+                    codefz = codefuzhu.bsup;
+                    break;
+                case "RB_bitem":
+                    codefz = codefuzhu.bitem;
+                    MessageBox.Show("请选择项目大类编码!");
+                    break;
+
+            }
+        }
+
+        #endregion 更改欲改为核算方式
+
+    }
+}
